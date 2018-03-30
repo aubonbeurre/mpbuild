@@ -1,10 +1,8 @@
 package main
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -14,6 +12,7 @@ import (
 	"time"
 
 	"github.com/jessevdk/go-flags"
+	"github.com/shirou/gopsutil/process"
 )
 
 var gOpts struct {
@@ -57,6 +56,7 @@ type Task struct {
 	Err      error
 	Output   string
 	Start    time.Time
+	PID      int
 }
 
 // IsCompleted ...
@@ -81,9 +81,60 @@ func (t *Task) HasPendingDeps(job *Job) bool {
 	return false
 }
 
+func logError(task *Task, msg string, err error) {
+	var s = "mpbuild: " + msg + " (%s) error: %v\n"
+	log.Printf(s, task.Messages, err)
+	if gOpts.Quiet && len(gOpts.Log) > 0 {
+		fmt.Printf(s, task.Messages, err)
+	}
+}
+
+func monitorTask(task *Task) {
+	var proc *process.Process
+	var err error
+	if proc, err = process.NewProcess(int32(task.PID)); err != nil {
+		logError(task, "NewProcess", err)
+		return
+	}
+
+	var processWasInactive float64
+	for true {
+		time.Sleep(time.Second)
+
+		/*if running, err2 := proc.IsRunning(); err2 != nil {
+			log.Printf("mpbuild: monitorTask IsRunning error: %v\n", err2)
+			fmt.Printf("mpbuild: monitorTask IsRunning error: %v\n", err2)
+			return
+		} else if !running {
+			return
+		}*/
+		var percent float64
+		if percent, err = proc.CPUPercent(); err != nil {
+			if !strings.Contains(err.Error(), "exit status") {
+				logError(task, "CPUPercent", err)
+			}
+			return
+		}
+
+		if percent < 0.5 {
+			processWasInactive += 0.5
+			if true /*processWasInactive > 2.0*/ {
+				logError(task, "task stuck", fmt.Errorf("%.2f", processWasInactive))
+			}
+		} else {
+			processWasInactive *= 0.75
+		}
+
+		if processWasInactive > 10 {
+			logError(task, "Process inactive, killing it", fmt.Errorf("%d", -1))
+			proc.Kill()
+		}
+	}
+}
+
 func build(id int, task *Task) (err error) {
 	var projname = strings.Split(filepath.Base(task.MadeProj), ".")[0]
-	log.Printf("START %s (worker %d)\n", projname, id)
+	log.Printf("mpbuild: START %s (worker %d)\n", projname, id)
 	task.Start = time.Now()
 	var cmd *exec.Cmd
 	var target = projname + "." + gOpts.Config
@@ -106,40 +157,58 @@ func build(id int, task *Task) (err error) {
 	}
 
 	cmd = exec.Command("xcodebuild", args...)
-	var stdout io.ReadCloser
-	stdout, err = cmd.StdoutPipe()
-	if err != nil {
-		return err
-	}
-	var stderr io.ReadCloser
-	stderr, err = cmd.StderrPipe()
-	if err != nil {
-		return err
-	}
-	cmdReader := io.MultiReader(stdout, stderr)
 
-	err = cmd.Start()
-	if err != nil {
-		return err
-	}
-
-	scanner := bufio.NewScanner(cmdReader)
-	for scanner.Scan() {
-		//fmt.Println(scanner.Text())
-		txt := scanner.Text()
-		if len(gOpts.Log) > 0 {
-			log.Println(task.Messages + ": " + txt)
+	/*
+		var stdout io.ReadCloser
+		stdout, err = cmd.StdoutPipe()
+		if err != nil {
+			logError(task, "StdoutPipe", err)
+			return err
 		}
-		task.Output += txt + "\n"
-	}
-	if scanner.Err() != nil {
-		return scanner.Err()
-	}
+		var stderr io.ReadCloser
+		stderr, err = cmd.StderrPipe()
+		if err != nil {
+			logError(task, "StderrPipe", err)
+			return err
+		}
+		cmdReader := io.MultiReader(stdout, stderr)
+	*/
+	/*err = cmd.Start()
+	if err != nil {
+		logError(task, "cmd.Start", err)
+		return err
+	}*/
+	/*
+		task.PID = cmd.Process.Pid
+		go monitorTask(task)
 
-	err = cmd.Wait()
+		scanner := bufio.NewScanner(cmdReader)
+		for scanner.Scan() {
+			//fmt.Println(scanner.Text())
+			txt := scanner.Text()
+			if len(gOpts.Log) > 0 {
+				log.Println(task.Messages + ": " + txt)
+			}
+			task.Output += txt + "\n"
+		}
+		if scanner.Err() != nil {
+			logError(task, "scanner.Err", scanner.Err())
+			return scanner.Err()
+		}
+	*/
+	/*err = cmd.Wait()
 	if err != nil {
 		//fmt.Println(task.Output)
+		logError(task, "Wait", err)
 		return err
+	}*/
+	var stdoutStderr []byte
+	stdoutStderr, err = cmd.CombinedOutput()
+	if err != nil {
+		return err
+	}
+	if len(gOpts.Log) > 0 {
+		log.Println(stdoutStderr)
 	}
 
 	return nil
@@ -215,19 +284,16 @@ func run(job *Job) (err error) {
 					if err == nil {
 						err = err2
 					}
-					log.Printf("Error %s (%v)\n", task.Messages, err)
-					if gOpts.Quiet && len(gOpts.Log) > 0 {
-						fmt.Printf("Error %s (%v)\n", task.Messages, err)
-					}
+					logError(task, "Error", err)
 				} else {
 					var Elapsed = time.Since(task.Start).Round(time.Duration(time.Second)).String()
-					log.Printf("->Done %s (%d/%d, cost:%d, time:%s)\n", task.Messages, tasksCompleted, len(job.Tasks), cost, Elapsed)
+					log.Printf("mpbuild: ->Done %s (%d/%d, cost:%d, time:%s)\n", task.Messages, tasksCompleted, len(job.Tasks), cost, Elapsed)
 					if gOpts.Quiet && len(gOpts.Log) > 0 {
-						fmt.Printf("->Done %s (%d/%d, cost:%d, time:%s)\n", task.Messages, tasksCompleted, len(job.Tasks), cost, Elapsed)
+						fmt.Printf("mpbuild: ->Done %s (%d/%d, cost:%d, time:%s)\n", task.Messages, tasksCompleted, len(job.Tasks), cost, Elapsed)
 					}
 				}
-			default:
-				time.Sleep(time.Second)
+			case <-time.After(time.Second):
+				//fmt.Fprintf(os.Stderr, "Sleeping: %d\n", tasksCompleted)
 				continueFlag = false
 			}
 		}
@@ -258,6 +324,7 @@ func LogSetupAndDestruct() func() {
 }
 
 func main() {
+	//runtime.GOMAXPROCS(runtime.NumCPU())
 
 	var err error
 	var args []string
