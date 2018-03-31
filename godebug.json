@@ -1,0 +1,9 @@
+{
+  "configurations": [
+{
+  "name": "Debug mpbuild",
+  "mode": "debug",
+  "args": ["-q", "-l", "log.txt", "-t", "60", "-w", "6", "-c", "Release", "-j", "/Volumes/Samsung_T3/sources/ae/main/AfterEffects/src/pkg/PREM/indep/mpbuild.json"]
+}
+]
+}

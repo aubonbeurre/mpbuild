@@ -21,8 +21,6 @@ var gOpts struct {
 	Job     string `short:"j" long:"job" description:"Job file" required:"true"`
 	Config  string `short:"c" long:"config" description:"Debug or Release" default:"Debug"`
 	Log     string `short:"l" long:"log" description:"Log file"`
-	Workers int    `short:"w" long:"workers" description:"Number of workers" default:"3"`
-	Threads int    `short:"t" long:"threads" description:"Number of threads for xcodebuild"`
 	Ios     bool   `short:"i" long:"ios" description:"ios build"`
 	Quiet   bool   `short:"q" long:"quiet" description:"Suppress most xcodebuild output"`
 	Start   string `short:"s" long:"start" description:"Start at project <search>"`
@@ -100,8 +98,8 @@ func build(id int, task *Task) (err error) {
 		"-configuration", "Default",
 	}
 
-	if gOpts.Threads != 0 {
-		args = append(args, "-jobs", fmt.Sprintf("%d", gOpts.Threads))
+	if GPrefs.Threads != 0 {
+		args = append(args, "-jobs", fmt.Sprintf("%d", GPrefs.Threads))
 	}
 	if gOpts.Ios {
 		args = append(args, "-arch", "arm64", "-sdk", "iphoneos")
@@ -161,7 +159,7 @@ func run(job *Job) (err error) {
 	var cost int
 
 	go workerStdout(messages)
-	for w := 1; w <= gOpts.Workers; w++ { //runtime.NumCPU())
+	for w := 1; w <= GPrefs.Workers; w++ { //runtime.NumCPU())
 		go workerFetchTask(job, w, tasks, results, messages)
 	}
 
@@ -237,6 +235,8 @@ func LogSetupAndDestruct() func() {
 
 func main() {
 	//runtime.GOMAXPROCS(runtime.NumCPU())
+
+	GPrefs.Load()
 
 	var err error
 	var args []string
