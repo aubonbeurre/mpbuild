@@ -18,7 +18,6 @@ var gOpts struct {
 	// Slice of bool will append 'true' each time the option
 	// is encountered (can be set multiple times, like -vvv)
 	Verbose []bool `short:"v" long:"verbose" description:"Show verbose debug information"`
-	Job     string `short:"j" long:"job" description:"Job file" required:"true"`
 	Config  string `short:"c" long:"config" description:"Debug or Release" default:"Debug"`
 	Log     string `short:"l" long:"log" description:"Log file"`
 	Ios     bool   `short:"i" long:"ios" description:"ios build"`
@@ -28,7 +27,8 @@ var gOpts struct {
 
 // Job ...
 type Job struct {
-	Tasks []*Task `json:"tasks"`
+	Tasks    []*Task `json:"tasks"`
+	Platform string  `json:"platform_type",omitempty`
 }
 
 // Search ...
@@ -216,8 +216,7 @@ func run(job *Job) (err error) {
 
 var parser = flags.NewParser(&gOpts, flags.Default)
 
-// LogSetupAndDestruct ...
-func LogSetupAndDestruct() func() {
+func logSetupAndDestruct() func() {
 	logFile, err := os.OpenFile(gOpts.Log, os.O_CREATE|os.O_APPEND|os.O_RDWR, 0666)
 	if err != nil {
 		log.Panicln(err)
@@ -248,39 +247,39 @@ func main() {
 		}
 	}
 
-	if len(args) > 1 {
-		log.Panic(fmt.Errorf("Too many or not enough arguments"))
-	}
-
 	if len(gOpts.Log) > 0 {
-		defer LogSetupAndDestruct()()
+		defer logSetupAndDestruct()()
 	}
 
-	var jobFile *os.File
-	if jobFile, err = os.Open(gOpts.Job); err != nil {
-		panic(err)
-	}
-	defer jobFile.Close()
+	for _, jobPath := range args {
 
-	var job *Job
-	if err = json.NewDecoder(jobFile).Decode(&job); err != nil {
-		panic(err)
-	}
+		var jobFile *os.File
+		if jobFile, err = os.Open(jobPath); err != nil {
+			panic(err)
+		}
+		defer jobFile.Close()
 
-	if len(gOpts.Start) > 0 {
-		ind := job.Search(gOpts.Start)
-		if ind != -1 {
-			for cnt, task := range job.Tasks {
-				if cnt == ind {
-					break
+		var job *Job
+		if err = json.NewDecoder(jobFile).Decode(&job); err != nil {
+			panic(err)
+		}
+
+		if len(gOpts.Start) > 0 {
+			ind := job.Search(gOpts.Start)
+			if ind != -1 {
+				for cnt, task := range job.Tasks {
+					if cnt == ind {
+						break
+					}
+					task.Running = true
+					task.SetCompleted()
 				}
-				task.Running = true
-				task.SetCompleted()
 			}
+		}
+
+		if err = run(job); err != nil {
+			panic(err)
 		}
 	}
 
-	if err = run(job); err != nil {
-		panic(err)
-	}
 }
