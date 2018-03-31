@@ -17,12 +17,12 @@ import (
 var gOpts struct {
 	// Slice of bool will append 'true' each time the option
 	// is encountered (can be set multiple times, like -vvv)
-	Verbose []bool `short:"v" long:"verbose" description:"Show verbose debug information"`
-	Config  string `short:"c" long:"config" description:"Debug or Release" default:"Debug"`
-	Log     string `short:"l" long:"log" description:"Log file"`
-	Ios     bool   `short:"i" long:"ios" description:"ios build"`
-	Quiet   bool   `short:"q" long:"quiet" description:"Suppress most xcodebuild output"`
-	Start   string `short:"s" long:"start" description:"Start at project <search>"`
+	Verbose []bool   `short:"v" long:"verbose" description:"Show verbose debug information"`
+	Config  []string `short:"c" long:"config" description:"Specify multiple Debug or Release (default both)"`
+	Log     string   `short:"l" long:"log" description:"Log file"`
+	Ios     bool     `short:"i" long:"ios" description:"ios build"`
+	Quiet   bool     `short:"q" long:"quiet" description:"Suppress most xcodebuild output"`
+	Start   string   `short:"s" long:"start" description:"Start at project <search>"`
 }
 
 // Job ...
@@ -85,12 +85,12 @@ func logError(task *Task, msg string, err error) {
 	}
 }
 
-func build(id int, task *Task) (err error) {
+func build(id int, task *Task, config string) (err error) {
 	var projname = strings.Split(filepath.Base(task.MadeProj), ".")[0]
 	log.Printf("mpbuild: START %s (worker %d)\n", projname, id)
 	task.Start = time.Now()
 	var cmd *exec.Cmd
-	var target = projname + "." + gOpts.Config
+	var target = projname + "." + config
 
 	args := []string{
 		"-project", task.MadeProj,
@@ -121,10 +121,10 @@ func build(id int, task *Task) (err error) {
 	return nil
 }
 
-func workerFetchTask(job *Job, id int, tasks <-chan *Task, results chan<- *Task, messages chan<- string) {
+func workerFetchTask(job *Job, config string, id int, tasks <-chan *Task, results chan<- *Task, messages chan<- string) {
 	for task := range tasks {
 		var err error
-		err = build(id, task)
+		err = build(id, task, config)
 
 		task.SetCompleted()
 
@@ -152,7 +152,7 @@ func workerStdout(messages <-chan string) {
 	}
 }
 
-func run(job *Job) (err error) {
+func run(job *Job, config string) (err error) {
 	var tasks = make(chan *Task, len(job.Tasks))
 	var messages = make(chan string)
 	var results = make(chan *Task, len(job.Tasks))
@@ -160,7 +160,7 @@ func run(job *Job) (err error) {
 
 	go workerStdout(messages)
 	for w := 1; w <= GPrefs.Workers; w++ { //runtime.NumCPU())
-		go workerFetchTask(job, w, tasks, results, messages)
+		go workerFetchTask(job, config, w, tasks, results, messages)
 	}
 
 	var tasksCompleted int
@@ -251,6 +251,10 @@ func main() {
 		defer logSetupAndDestruct()()
 	}
 
+	if len(gOpts.Config) == 0 {
+		gOpts.Config = []string{"Debug", "Release"}
+	}
+
 	for _, jobPath := range args {
 
 		var jobFile *os.File
@@ -277,8 +281,10 @@ func main() {
 			}
 		}
 
-		if err = run(job); err != nil {
-			panic(err)
+		for _, config := range gOpts.Config {
+			if err = run(job, config); err != nil {
+				panic(err)
+			}
 		}
 	}
 
