@@ -87,7 +87,7 @@ func logError(task *Task, msg string, err error) {
 
 func build(id int, task *Task, config string) (err error) {
 	var projname = strings.Split(filepath.Base(task.MadeProj), ".")[0]
-	log.Printf("mpbuild: START %s (worker %d)\n", projname, id)
+	log.Printf("mpbuild: START %s|%s (worker %d)\n", projname, config, id)
 	task.Start = time.Now()
 	var cmd *exec.Cmd
 	var target = projname + "." + config
@@ -158,6 +158,8 @@ func run(job *Job, config string) (err error) {
 	var results = make(chan *Task, len(job.Tasks))
 	var cost int
 
+	log.Printf("._%s_.\n", config)
+	fmt.Printf("._%s_.\n", config)
 	go workerStdout(messages)
 	for w := 1; w <= GPrefs.Workers; w++ { //runtime.NumCPU())
 		go workerFetchTask(job, config, w, tasks, results, messages)
@@ -197,9 +199,9 @@ func run(job *Job, config string) (err error) {
 					logError(task, "Error", err)
 				} else {
 					var Elapsed = time.Since(task.Start).Round(time.Duration(time.Second)).String()
-					log.Printf("mpbuild: ->Done %s (%d/%d, cost:%d, time:%s)\n", task.Messages, tasksCompleted, len(job.Tasks), cost, Elapsed)
+					log.Printf("mpbuild: ->Done %s|%s (%d/%d, cost:%d, time:%s)\n", task.Messages, config, tasksCompleted, len(job.Tasks), cost, Elapsed)
 					if gOpts.Quiet && len(gOpts.Log) > 0 {
-						fmt.Printf("mpbuild: ->Done %s (%d/%d, cost:%d, time:%s)\n", task.Messages, tasksCompleted, len(job.Tasks), cost, Elapsed)
+						fmt.Printf("mpbuild: ->Done %s|%s (%d/%d, cost:%d, time:%s)\n", task.Messages, config, tasksCompleted, len(job.Tasks), cost, Elapsed)
 					}
 				}
 			case <-time.After(time.Second):
@@ -255,33 +257,39 @@ func main() {
 		gOpts.Config = []string{"Debug", "Release"}
 	}
 
+	log.Printf("Configs: %s\n", strings.Join(gOpts.Config, ","))
+
 	for _, jobPath := range args {
 
-		var jobFile *os.File
-		if jobFile, err = os.Open(jobPath); err != nil {
-			panic(err)
-		}
-		defer jobFile.Close()
+		for _, config := range gOpts.Config {
+			var jobFile *os.File
+			if jobFile, err = os.Open(jobPath); err != nil {
+				panic(err)
+			}
+			defer jobFile.Close()
 
-		var job *Job
-		if err = json.NewDecoder(jobFile).Decode(&job); err != nil {
-			panic(err)
-		}
+			var job *Job
+			if err = json.NewDecoder(jobFile).Decode(&job); err != nil {
+				panic(err)
+			}
 
-		if len(gOpts.Start) > 0 {
-			ind := job.Search(gOpts.Start)
-			if ind != -1 {
-				for cnt, task := range job.Tasks {
-					if cnt == ind {
-						break
+			if job.Platform == "ios" {
+				gOpts.Ios = true
+			}
+
+			if len(gOpts.Start) > 0 {
+				ind := job.Search(gOpts.Start)
+				if ind != -1 {
+					for cnt, task := range job.Tasks {
+						if cnt == ind {
+							break
+						}
+						task.Running = true
+						task.SetCompleted()
 					}
-					task.Running = true
-					task.SetCompleted()
 				}
 			}
-		}
 
-		for _, config := range gOpts.Config {
 			if err = run(job, config); err != nil {
 				panic(err)
 			}
