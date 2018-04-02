@@ -113,12 +113,9 @@ func build(id int, task *Task, config string) (err error) {
 
 	var stdoutStderr []byte
 	stdoutStderr, err = cmd.CombinedOutput()
-	if err != nil {
-		return err
-	}
 	task.Output = string(stdoutStderr[:])
 
-	return nil
+	return err
 }
 
 func workerFetchTask(job *Job, config string, id int, tasks <-chan *Task, results chan<- *Task, messages chan<- string) {
@@ -196,7 +193,7 @@ func run(job *Job, config string) (err error) {
 					if err == nil {
 						err = err2
 					}
-					logError(task, "Error", err)
+					logError(task, "Error", err2)
 				} else {
 					var Elapsed = time.Since(task.Start).Round(time.Duration(time.Second)).String()
 					log.Printf("mpbuild: ->Done %s|%s (%d/%d, cost:%d, time:%s)\n", task.Messages, config, tasksCompleted, len(job.Tasks), cost, Elapsed)
@@ -213,7 +210,7 @@ func run(job *Job, config string) (err error) {
 	close(tasks)
 	close(messages)
 
-	return nil
+	return err
 }
 
 var parser = flags.NewParser(&gOpts, flags.Default)
