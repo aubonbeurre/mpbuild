@@ -16,8 +16,15 @@ var (
 
 // Prefs ...
 type Prefs struct {
-	Workers int `yaml:"workers"`
-	Threads int `yaml:"threads"`
+	Workers  int `yaml:"workers"`
+	Threads  int `yaml:"threads"`
+	Projects []Project
+}
+
+// Project ...
+type Project struct {
+	Name  string `yaml:"name"`
+	Alone bool   `yaml:"alone,omitempty"`
 }
 
 // Load ...
@@ -34,6 +41,15 @@ func (d *Prefs) Load() {
 		var data []byte
 		GPrefs.Workers = 3
 		GPrefs.Threads = 10
+		GPrefs.Projects = []Project{
+			{Name: "HandlerProject", Alone: true},
+			{Name: "HandlerTimeline", Alone: true},
+			{Name: "HandlerGraphics", Alone: true},
+			{Name: "HandlerSourceMonitor", Alone: true},
+			{Name: "HandlerEffectControls", Alone: true},
+			{Name: "TeamProjectsLocalHub", Alone: true},
+			{Name: "TeamProjectsLocalLib", Alone: true},
+		}
 		if data, err = yaml.Marshal(&GPrefs); err != nil {
 			panic(err)
 		}

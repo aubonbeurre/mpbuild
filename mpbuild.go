@@ -6,7 +6,9 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -28,7 +30,32 @@ var gOpts struct {
 // Job ...
 type Job struct {
 	Tasks    []*Task `json:"tasks"`
-	Platform string  `json:"platform_type",omitempty`
+	Platform string  `json:"platform_type,omitempty"`
+}
+
+var gVS2017 = `C:\Program Files (x86)\Microsoft Visual Studio\2017\Common7\IDE`
+var gVS2017Ent = `C:\Program Files (x86)\Microsoft Visual Studio\2017\Enterprise\Common7\IDE`
+var gVS2017Ult = `C:\Program Files (x86)\Microsoft Visual Studio\2017\Ultimate\Common7\IDE`
+var gVS2015 = `C:\Program Files (x86)\Microsoft Visual Studio 14.0\Common7\IDE`
+
+func checkWinCompiler() (path string) {
+	if _, err := os.Stat(gVS2017); os.IsNotExist(err) {
+		if _, err := os.Stat(gVS2017Ent); os.IsNotExist(err) {
+			if _, err := os.Stat(gVS2017Ult); os.IsNotExist(err) {
+				if _, err := os.Stat(gVS2015); os.IsNotExist(err) {
+					log.Panic("Could not find VisualStudio!")
+				} else {
+					return gVS2015
+				}
+			} else {
+				return gVS2017Ult
+			}
+		} else {
+			return gVS2017Ent
+		}
+	}
+	return gVS2017
+
 }
 
 // Search ...
@@ -90,26 +117,41 @@ func build(id int, task *Task, config string) (err error) {
 	log.Printf("mpbuild: START %s|%s (worker %d)\n", projname, config, id)
 	task.Start = time.Now()
 	var cmd *exec.Cmd
-	var target = projname + "." + config
 
-	args := []string{
-		"-project", task.MadeProj,
-		"-target", target,
-		"-configuration", "Default",
-	}
+	if runtime.GOOS == "windows" {
+		compilerPath := path.Join(checkWinCompiler(), "devenv.com")
+		args := []string{
+			task.MadeProj,
+			"/build", fmt.Sprintf("%s|%s", config, "x64"),
+			"/projectconfig", config,
+		}
 
-	if GPrefs.Threads != 0 {
-		args = append(args, "-jobs", fmt.Sprintf("%d", GPrefs.Threads))
-	}
-	if gOpts.Ios {
-		args = append(args, "-arch", "arm64", "-sdk", "iphoneos")
-	}
-	args = append(args, "build")
-	if len(gOpts.Verbose) > 0 {
-		fmt.Printf("xcodebuild %s\n", strings.Join(args, " "))
-	}
+		if len(gOpts.Verbose) > 0 {
+			fmt.Printf("xcodebuild %s\n", strings.Join(args, " "))
+		}
+		cmd = exec.Command(compilerPath, args...)
+	} else {
+		var target = projname + "." + config
 
-	cmd = exec.Command("xcodebuild", args...)
+		args := []string{
+			"-project", task.MadeProj,
+			"-target", target,
+			"-configuration", "Default",
+		}
+
+		if GPrefs.Threads != 0 {
+			args = append(args, "-jobs", fmt.Sprintf("%d", GPrefs.Threads))
+		}
+		if gOpts.Ios {
+			args = append(args, "-arch", "arm64", "-sdk", "iphoneos")
+		}
+		args = append(args, "build")
+
+		if len(gOpts.Verbose) > 0 {
+			fmt.Printf("xcodebuild %s\n", strings.Join(args, " "))
+		}
+		cmd = exec.Command("xcodebuild", args...)
+	}
 
 	var stdoutStderr []byte
 	stdoutStderr, err = cmd.CombinedOutput()
@@ -149,11 +191,22 @@ func workerStdout(messages <-chan string) {
 	}
 }
 
+func isAloneProject(task *Task) bool {
+	for _, p := range GPrefs.Projects {
+		if p.Alone && strings.Contains(task.Messages, p.Name) {
+			fmt.Printf("IsAlone: %s\n", p.Name)
+			return true
+		}
+	}
+	return false
+}
+
 func run(job *Job, config string) (err error) {
 	var tasks = make(chan *Task, len(job.Tasks))
 	var messages = make(chan string)
 	var results = make(chan *Task, len(job.Tasks))
 	var cost int
+	var numRunning int
 
 	log.Printf("._%s_.\n", config)
 	fmt.Printf("._%s_.\n", config)
@@ -174,9 +227,12 @@ func run(job *Job, config string) (err error) {
 		for _, task := range job.Tasks {
 			if !task.Running && !task.IsCompleted() {
 				if !task.HasPendingDeps(job) {
-					task.Running = true
-					cost += task.Cost
-					tasks <- task
+					if !isAloneProject(task) || numRunning == 0 {
+						task.Running = true
+						cost += task.Cost
+						numRunning++
+						tasks <- task
+					}
 				} else {
 					//fmt.Printf("Skipping %s\n", task.Messages)
 				}
@@ -188,6 +244,7 @@ func run(job *Job, config string) (err error) {
 			select {
 			case task := <-results:
 				tasksCompleted++
+				numRunning--
 				cost -= task.Cost
 				if err2 := task.Err; err2 != nil {
 					if err == nil {
