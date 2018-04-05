@@ -25,6 +25,7 @@ var gOpts struct {
 	Ios     bool     `short:"i" long:"ios" description:"ios build"`
 	Quiet   bool     `short:"q" long:"quiet" description:"Suppress most xcodebuild output"`
 	Start   string   `short:"s" long:"start" description:"Start at project <search>"`
+	Only    string   `short:"o" long:"only" description:"Optional comma separated list of projects"`
 }
 
 // Job ...
@@ -192,9 +193,11 @@ func workerStdout(messages <-chan string) {
 }
 
 func isAloneProject(task *Task) bool {
+	if runtime.GOOS != "windows" {
+		return false
+	}
 	for _, p := range GPrefs.Projects {
 		if p.Alone && strings.Contains(task.Messages, p.Name) {
-			fmt.Printf("IsAlone: %s\n", p.Name)
 			return true
 		}
 	}
@@ -207,6 +210,7 @@ func run(job *Job, config string) (err error) {
 	var results = make(chan *Task, len(job.Tasks))
 	var cost int
 	var numRunning int
+	var isAloneLaunched bool
 
 	log.Printf("._%s_.\n", config)
 	fmt.Printf("._%s_.\n", config)
@@ -227,7 +231,8 @@ func run(job *Job, config string) (err error) {
 		for _, task := range job.Tasks {
 			if !task.Running && !task.IsCompleted() {
 				if !task.HasPendingDeps(job) {
-					if !isAloneProject(task) || numRunning == 0 {
+					if (!isAloneProject(task) && !isAloneLaunched) || numRunning == 0 {
+						isAloneLaunched = isAloneProject(task)
 						task.Running = true
 						cost += task.Cost
 						numRunning++
@@ -245,6 +250,7 @@ func run(job *Job, config string) (err error) {
 			case task := <-results:
 				tasksCompleted++
 				numRunning--
+				isAloneLaunched = false
 				cost -= task.Cost
 				if err2 := task.Err; err2 != nil {
 					if err == nil {
@@ -338,6 +344,24 @@ func main() {
 						if cnt == ind {
 							break
 						}
+						task.Running = true
+						task.SetCompleted()
+					}
+				}
+			}
+
+			if len(gOpts.Only) > 0 {
+				var allOnly = strings.Split(gOpts.Only, ",")
+
+				for _, task := range job.Tasks {
+					var isOnly bool
+					for _, only := range allOnly {
+						isOnly = strings.Contains(task.Messages, strings.TrimSpace(only))
+						if isOnly {
+							break
+						}
+					}
+					if !isOnly {
 						task.Running = true
 						task.SetCompleted()
 					}
