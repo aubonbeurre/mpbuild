@@ -26,3 +26,7 @@ Apache license.
 - `threads`: number of threads used by each xcodebuild
 
 ### Credits :
+
+### See also :
+
+https://github.com/aubonbeurre/homebrew-distcc
