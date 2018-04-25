@@ -204,6 +204,15 @@ func isAloneProject(task *Task) bool {
 	return false
 }
 
+func isIgnoreProject(task *Task) bool {
+	for _, p := range GPrefs.Projects {
+		if p.Ignore && strings.Contains(task.Messages, p.Name) {
+			return true
+		}
+	}
+	return false
+}
+
 func run(job *Job, config string) (err error) {
 	var tasks = make(chan *Task, len(job.Tasks))
 	var messages = make(chan string)
@@ -337,6 +346,7 @@ func main() {
 				gOpts.Ios = true
 			}
 
+			// handle --start
 			if len(gOpts.Start) > 0 {
 				ind := job.Search(gOpts.Start)
 				if ind != -1 {
@@ -350,6 +360,7 @@ func main() {
 				}
 			}
 
+			// handle --only
 			if len(gOpts.Only) > 0 {
 				var allOnly = strings.Split(gOpts.Only, ",")
 
@@ -368,6 +379,19 @@ func main() {
 				}
 			}
 
+			// skip ignored projects
+			for _, task := range job.Tasks {
+				if isIgnoreProject(task) {
+					log.Printf("Skipping ignored project '%s', based on prefs\n", task.Messages)
+					if gOpts.Quiet && len(gOpts.Log) > 0 {
+						fmt.Printf("Skipping ignored project '%s', based on prefs\n", task.Messages)
+					}
+					task.Running = true
+					task.SetCompleted()
+				}
+			}
+
+			// build!
 			if err = run(job, config); err != nil {
 				panic(err)
 			}
