@@ -26,6 +26,7 @@ var gOpts struct {
 	Quiet   bool     `short:"q" long:"quiet" description:"Suppress most xcodebuild output"`
 	Start   string   `short:"s" long:"start" description:"Start at project <search>"`
 	Only    string   `short:"o" long:"only" description:"Optional comma separated list of projects"`
+	UI      bool     `short:"u" long:"ui" description:"Show a UI for tracking distcc/xcode activity"`
 }
 
 // Job ...
@@ -316,6 +317,11 @@ func main() {
 		} else {
 			os.Exit(1)
 		}
+	}
+
+	if gOpts.UI {
+		runUI()
+		return
 	}
 
 	if len(gOpts.Log) > 0 {
