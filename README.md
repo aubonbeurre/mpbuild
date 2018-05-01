@@ -29,4 +29,5 @@ Apache license.
 
 ### See also :
 
+https://github.com/aubonbeurre/homebrew-tap
 https://github.com/aubonbeurre/homebrew-distcc/tree/myv3.2rc1.2
