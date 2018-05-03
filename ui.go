@@ -129,7 +129,7 @@ func autorefresh(g *gocui.Gui) {
 		select {
 		case <-done:
 			return
-		case <-time.After(time.Second):
+		case <-time.After(2 * time.Second):
 			gRefreshCount++
 
 			g.Update(dorefresh)
