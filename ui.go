@@ -101,11 +101,9 @@ func dorefresh(g *gocui.Gui) (err error) {
 	}
 	v.Clear()
 	args2 := []string{
-		"-c",
-		"ps",
 		"-A",
 	}
-	cmd = exec.Command("bash", args2...)
+	cmd = exec.Command("ps", args2...)
 
 	stdoutStderr, _ = cmd.CombinedOutput()
 
