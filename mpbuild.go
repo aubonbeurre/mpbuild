@@ -9,7 +9,6 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -28,6 +27,7 @@ var gOpts struct {
 	Start   string   `short:"s" long:"start" description:"Start at project <search>"`
 	Only    string   `short:"o" long:"only" description:"Optional comma separated list of projects"`
 	Deps    string   `short:"d" long:"deps" description:"Optional comma separated list of projects"`
+	Not     string   `short:"n" long:"not" description:"Optional comma separated list of projects"`
 	UI      bool     `short:"u" long:"ui" description:"Show a UI for tracking distcc/xcode activity"`
 }
 
@@ -93,6 +93,7 @@ func (t *Task) IsCompleted() bool {
 
 // SetCompleted ...
 func (t *Task) SetCompleted() {
+	t.Running = true
 	atomic.StoreInt32(&t.Complete, 1)
 }
 
@@ -327,6 +328,7 @@ func main() {
 		if flagsErr, ok := err.(*flags.Error); ok && flagsErr.Type == flags.ErrHelp {
 			os.Exit(0)
 		} else {
+			fmt.Printf("%v\n", flagsErr)
 			os.Exit(1)
 		}
 	}
@@ -372,7 +374,6 @@ func main() {
 						if cnt == ind {
 							break
 						}
-						task.Running = true
 						task.SetCompleted()
 					}
 				}
@@ -391,8 +392,23 @@ func main() {
 						}
 					}
 					if !isOnly {
-						task.Running = true
 						task.SetCompleted()
+					}
+				}
+			}
+
+			// handle --not
+			if len(gOpts.Not) > 0 {
+				var allNot = strings.Split(gOpts.Not, ",")
+
+				for _, task := range job.Tasks {
+					var isNot bool
+					for _, not := range allNot {
+						isNot = strings.Contains(task.Messages, strings.TrimSpace(not))
+						if isNot {
+							task.SetCompleted()
+							break
+						}
 					}
 				}
 			}
@@ -426,18 +442,9 @@ func main() {
 					}
 					previousSize = len(todo)
 				}
-				var sorted = make([]int, 0)
-				for ID := range todo {
-					sorted = append(sorted, ID)
-				}
-				sort.Ints(sorted)
-				for _, ID := range sorted {
-					fmt.Printf("Will build: %v [%d]\n", job.Tasks[ID].Messages, ID)
-				}
 
 				for _, task := range job.Tasks {
 					if _, ok := todo[task.ID]; !ok {
-						task.Running = true
 						task.SetCompleted()
 					}
 				}
@@ -450,8 +457,15 @@ func main() {
 					if gOpts.Quiet && len(gOpts.Log) > 0 {
 						fmt.Printf("Skipping ignored project '%s', based on prefs\n", task.Messages)
 					}
-					task.Running = true
 					task.SetCompleted()
+				}
+			}
+
+			if len(gOpts.Deps) > 0 || len(gOpts.Start) > 0 || len(gOpts.Not) > 0 || len(gOpts.Only) > 0 {
+				for _, task := range job.Tasks {
+					if !task.IsCompleted() {
+						fmt.Printf("mpbuild: Will build: %v [%d]\n", task.Messages, task.ID)
+					}
 				}
 			}
 
