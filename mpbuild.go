@@ -9,6 +9,7 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -26,6 +27,7 @@ var gOpts struct {
 	Quiet   bool     `short:"q" long:"quiet" description:"Suppress most xcodebuild output"`
 	Start   string   `short:"s" long:"start" description:"Start at project <search>"`
 	Only    string   `short:"o" long:"only" description:"Optional comma separated list of projects"`
+	Deps    string   `short:"d" long:"deps" description:"Optional comma separated list of projects"`
 	UI      bool     `short:"u" long:"ui" description:"Show a UI for tracking distcc/xcode activity"`
 }
 
@@ -100,6 +102,16 @@ func (t *Task) HasPendingDeps(job *Job) bool {
 		task := job.Tasks[input]
 		if !task.IsCompleted() {
 			//fmt.Printf("  %s depends on %s\n", t.Messages, task.Messages)
+			return true
+		}
+	}
+	return false
+}
+
+// DependsOn ...
+func (t *Task) DependsOn(ID int) bool {
+	for _, input := range t.Inputs {
+		if ID == input {
 			return true
 		}
 	}
@@ -379,6 +391,52 @@ func main() {
 						}
 					}
 					if !isOnly {
+						task.Running = true
+						task.SetCompleted()
+					}
+				}
+			}
+
+			// handle --deps
+			if len(gOpts.Deps) > 0 {
+				var allDeps = strings.Split(gOpts.Deps, ",")
+
+				var todo = make(map[int]bool)
+
+				for _, task := range job.Tasks {
+					for _, dep := range allDeps {
+						if strings.Contains(task.Messages, strings.TrimSpace(dep)) {
+							todo[task.ID] = true
+						}
+					}
+				}
+				var previousSize = -1
+				var size = len(todo)
+
+				for previousSize != size {
+					size = len(todo)
+
+					for _, task := range job.Tasks {
+						for ID := range todo {
+							if task.DependsOn(ID) {
+								todo[task.ID] = true
+								break
+							}
+						}
+					}
+					previousSize = len(todo)
+				}
+				var sorted = make([]int, 0)
+				for ID := range todo {
+					sorted = append(sorted, ID)
+				}
+				sort.Ints(sorted)
+				for _, ID := range sorted {
+					fmt.Printf("Will build: %v [%d]\n", job.Tasks[ID].Messages, ID)
+				}
+
+				for _, task := range job.Tasks {
+					if _, ok := todo[task.ID]; !ok {
 						task.Running = true
 						task.SetCompleted()
 					}
