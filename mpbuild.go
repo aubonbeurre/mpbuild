@@ -19,16 +19,17 @@ import (
 var gOpts struct {
 	// Slice of bool will append 'true' each time the option
 	// is encountered (can be set multiple times, like -vvv)
-	Verbose []bool   `short:"v" long:"verbose" description:"Show verbose debug information"`
-	Config  []string `short:"c" long:"config" description:"Specify multiple Debug or Release (default both)"`
-	Log     string   `short:"l" long:"log" description:"Log file"`
-	Ios     bool     `short:"i" long:"ios" description:"ios build"`
-	Quiet   bool     `short:"q" long:"quiet" description:"Suppress most xcodebuild output"`
-	Start   string   `short:"s" long:"start" description:"Start at project <search>"`
-	Only    string   `short:"o" long:"only" description:"Optional comma separated list of projects"`
-	Deps    string   `short:"d" long:"deps" description:"Optional comma separated list of projects"`
-	Not     string   `short:"n" long:"not" description:"Optional comma separated list of projects"`
-	UI      bool     `short:"u" long:"ui" description:"Show a UI for tracking distcc/xcode activity"`
+	Verbose     []bool   `short:"v" long:"verbose" description:"Show verbose debug information"`
+	Config      []string `short:"c" long:"config" description:"Specify multiple Debug or Release (default both)"`
+	Log         string   `short:"l" long:"log" description:"Log file"`
+	Ios         bool     `short:"i" long:"ios" description:"ios build"`
+	Quiet       bool     `short:"q" long:"quiet" description:"Suppress most xcodebuild output"`
+	Start       string   `short:"s" long:"start" description:"Start at project <search>"`
+	Only        string   `short:"o" long:"only" description:"Optional comma separated list of projects"`
+	Deps        string   `short:"d" long:"deps" description:"Optional comma separated list of projects"`
+	Not         string   `short:"n" long:"not" description:"Optional comma separated list of projects"`
+	UI          bool     `short:"u" long:"ui" description:"Show a UI for tracking distcc/xcode activity"`
+	ContinueErr bool     `short:"C" long:"continue" description:"Continue on error"`
 }
 
 // Job ...
@@ -276,7 +277,7 @@ func run(job *Job, config string) (err error) {
 				isAloneLaunched = false
 				cost -= task.Cost
 				if err2 := task.Err; err2 != nil {
-					if err == nil {
+					if err == nil && !gOpts.ContinueErr {
 						err = err2
 					}
 					logError(task, "Error", err2)
