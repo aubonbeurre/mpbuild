@@ -30,6 +30,7 @@ var gOpts struct {
 	Not         string   `short:"n" long:"not" description:"Optional comma separated list of projects"`
 	UI          bool     `short:"u" long:"ui" description:"Show a UI for tracking distcc/xcode activity"`
 	ContinueErr bool     `short:"C" long:"continue" description:"Continue on error"`
+	ListPlugins bool     `long:"listplugins" description:"List all plugins"`
 }
 
 // Job ...
@@ -365,6 +366,23 @@ func main() {
 
 			if job.Platform == "ios" {
 				gOpts.Ios = true
+			}
+
+			if gOpts.ListPlugins {
+				for _, task := range job.Tasks {
+					var isPlugin = true
+					for _, task2 := range job.Tasks {
+						if task2.DependsOn(task.ID) && task2.ID != len(job.Tasks)-1 {
+							//fmt.Printf("%s depends on %s\n", task2.Messages, task.Messages)
+							isPlugin = false
+							break
+						}
+					}
+					if isPlugin && task.ID != len(job.Tasks)-1 {
+						fmt.Printf("mpbuild: Plugin: %s\n", task.Messages)
+					}
+				}
+				os.Exit(0)
 			}
 
 			// handle --start
