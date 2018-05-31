@@ -31,6 +31,7 @@ var gOpts struct {
 	UI          bool     `short:"u" long:"ui" description:"Show a UI for tracking distcc/xcode activity"`
 	ContinueErr bool     `short:"C" long:"continue" description:"Continue on error"`
 	ListPlugins bool     `long:"listplugins" description:"List all plugins"`
+	SkipPlugins bool     `long:"skipplugins" description:"Skip building auto-detected plugins"`
 }
 
 // Job ...
@@ -368,7 +369,7 @@ func main() {
 				gOpts.Ios = true
 			}
 
-			if gOpts.ListPlugins {
+			if gOpts.ListPlugins || gOpts.SkipPlugins {
 				for _, task := range job.Tasks {
 					var isPlugin = true
 					for _, task2 := range job.Tasks {
@@ -378,11 +379,19 @@ func main() {
 							break
 						}
 					}
-					if isPlugin && task.ID != len(job.Tasks)-1 {
+					if isPlugin && !strings.Contains(task.MadeProj, "MediaCore") && !strings.Contains(task.MadeProj, "plugin") {
+						isPlugin = false
+					}
+					if isPlugin {
 						fmt.Printf("mpbuild: Plugin: %s\n", task.Messages)
+						if gOpts.SkipPlugins {
+							task.SetCompleted()
+						}
 					}
 				}
-				os.Exit(0)
+				if !gOpts.SkipPlugins {
+					os.Exit(0)
+				}
 			}
 
 			// handle --start
