@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -178,13 +179,15 @@ func build(id int, task *Task, config string) (err error) {
 	return err
 }
 
-func workerFetchTask(job *Job, config string, id int, tasks <-chan *Task, results chan<- *Task, messages chan<- string) {
+func workerFetchTask(job *Job, config string, id int, tasks <-chan *Task,
+	results chan<- *Task, messages chan<- string, wg *sync.WaitGroup) {
 	for task := range tasks {
 		var err error
 		err = build(id, task, config)
 
 		task.SetCompleted()
 
+		wg.Add(1)
 		messages <- task.Output
 		task.Output = ""
 
@@ -198,7 +201,7 @@ func workerFetchTask(job *Job, config string, id int, tasks <-chan *Task, result
 	}
 }
 
-func workerStdout(messages <-chan string) {
+func workerStdout(messages <-chan string, wg *sync.WaitGroup) {
 	for message := range messages {
 		if !gOpts.Quiet {
 			fmt.Print(message)
@@ -206,6 +209,7 @@ func workerStdout(messages <-chan string) {
 		if len(gOpts.Log) > 0 {
 			log.Print(message)
 		}
+		wg.Done()
 	}
 }
 
@@ -237,12 +241,13 @@ func run(job *Job, config string) (err error) {
 	var cost int
 	var numRunning int
 	var isAloneLaunched bool
+	var wg sync.WaitGroup
 
 	log.Printf("._%s_.\n", config)
 	fmt.Printf("._%s_.\n", config)
-	go workerStdout(messages)
+	go workerStdout(messages, &wg)
 	for w := 1; w <= GPrefs.Workers; w++ { //runtime.NumCPU())
-		go workerFetchTask(job, config, w, tasks, results, messages)
+		go workerFetchTask(job, config, w, tasks, results, messages, &wg)
 	}
 
 	var tasksCompleted int
@@ -298,6 +303,7 @@ func run(job *Job, config string) (err error) {
 	}
 	close(tasks)
 	close(messages)
+	wg.Wait()
 
 	return err
 }
