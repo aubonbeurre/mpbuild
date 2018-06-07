@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	humanize "github.com/dustin/go-humanize"
@@ -16,7 +17,7 @@ import (
 var (
 	done          = make(chan struct{})
 	wg            sync.WaitGroup
-	gRefreshCount = 0
+	gRefreshCount int32
 )
 
 func layout(g *gocui.Gui) (err error) {
@@ -67,6 +68,8 @@ func runUI() {
 
 func dorefresh(g *gocui.Gui) (err error) {
 	var v *gocui.View
+
+	atomic.CompareAndSwapInt32(&gRefreshCount, 1, 0)
 
 	v, err = g.View("side")
 	if err != nil {
@@ -128,9 +131,10 @@ func autorefresh(g *gocui.Gui) {
 		case <-done:
 			return
 		case <-time.After(2 * time.Second):
-			gRefreshCount++
+			if atomic.CompareAndSwapInt32(&gRefreshCount, 0, 1) {
+				g.Update(dorefresh)
+			}
 
-			g.Update(dorefresh)
 		}
 	}
 }
