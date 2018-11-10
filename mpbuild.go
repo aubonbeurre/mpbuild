@@ -30,6 +30,7 @@ var gOpts struct {
 	Deps        string   `short:"d" long:"deps" description:"Optional comma separated list of projects"`
 	Not         string   `short:"n" long:"not" description:"Optional comma separated list of projects"`
 	UI          bool     `short:"u" long:"ui" description:"Show a UI for tracking distcc/xcode activity"`
+	Bazel       bool     `long:"bazel" description:"Bazel experimentation"`
 	ContinueErr bool     `short:"C" long:"continue" description:"Continue on error"`
 	ListPlugins bool     `long:"listplugins" description:"List all plugins"`
 	SkipPlugins bool     `long:"skipplugins" description:"Skip building auto-detected plugins"`
@@ -81,6 +82,7 @@ type Task struct {
 	Inputs   []int  `json:"inputs"`
 	Cost     int    `json:"cost"`
 	Messages string `json:"messages"`
+	Mpfile   string `json:"mp_file,omitempty"`
 	MadeProj string `json:"made_proj"`
 	ID       int    `json:"id"`
 	Complete int32
@@ -121,6 +123,12 @@ func (t *Task) DependsOn(ID int) bool {
 		}
 	}
 	return false
+}
+
+// BazelJSON ...
+func (t *Task) BazelJSON() string {
+	ext := path.Ext(t.Mpfile)
+	return t.Mpfile[0:len(t.Mpfile)-len(ext)] + ".bzlson"
 }
 
 func logError(task *Task, msg string, err error) {
@@ -344,6 +352,11 @@ func main() {
 
 	if gOpts.UI {
 		runUI()
+		return
+	}
+
+	if gOpts.Bazel {
+		runBazel(args[0])
 		return
 	}
 
