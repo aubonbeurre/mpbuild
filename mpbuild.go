@@ -6,9 +6,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"path"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -40,31 +38,6 @@ var gOpts struct {
 type Job struct {
 	Tasks    []*Task `json:"tasks"`
 	Platform string  `json:"platform_type,omitempty"`
-}
-
-var gVS2017 = `C:\Program Files (x86)\Microsoft Visual Studio\2017\Common7\IDE`
-var gVS2017Ent = `C:\Program Files (x86)\Microsoft Visual Studio\2017\Enterprise\Common7\IDE`
-var gVS2017Ult = `C:\Program Files (x86)\Microsoft Visual Studio\2017\Ultimate\Common7\IDE`
-var gVS2015 = `C:\Program Files (x86)\Microsoft Visual Studio 14.0\Common7\IDE`
-
-func checkWinCompiler() (path string) {
-	if _, err := os.Stat(gVS2017); os.IsNotExist(err) {
-		if _, err := os.Stat(gVS2017Ent); os.IsNotExist(err) {
-			if _, err := os.Stat(gVS2017Ult); os.IsNotExist(err) {
-				if _, err := os.Stat(gVS2015); os.IsNotExist(err) {
-					log.Panic("Could not find VisualStudio!")
-				} else {
-					return gVS2015
-				}
-			} else {
-				return gVS2017Ult
-			}
-		} else {
-			return gVS2017Ent
-		}
-	}
-	return gVS2017
-
 }
 
 // Search ...
@@ -145,40 +118,26 @@ func build(id int, task *Task, config string) (err error) {
 	task.Start = time.Now()
 	var cmd *exec.Cmd
 
-	if runtime.GOOS == "windows" {
-		compilerPath := path.Join(checkWinCompiler(), "devenv.com")
-		args := []string{
-			task.MadeProj,
-			"/build", fmt.Sprintf("%s|%s", config, "x64"),
-			"/projectconfig", config,
-		}
+	var target = projname + "." + config
 
-		if len(gOpts.Verbose) > 0 {
-			fmt.Printf("xcodebuild %s\n", strings.Join(args, " "))
-		}
-		cmd = exec.Command(compilerPath, args...)
-	} else {
-		var target = projname + "." + config
-
-		args := []string{
-			"-project", task.MadeProj,
-			"-target", target,
-			"-configuration", "Default",
-		}
-
-		if GPrefs.Threads != 0 {
-			args = append(args, "-jobs", fmt.Sprintf("%d", GPrefs.Threads))
-		}
-		if gOpts.Ios {
-			args = append(args, "-arch", "arm64", "-sdk", "iphoneos")
-		}
-		args = append(args, "build")
-
-		if len(gOpts.Verbose) > 0 {
-			fmt.Printf("xcodebuild %s\n", strings.Join(args, " "))
-		}
-		cmd = exec.Command("xcodebuild", args...)
+	args := []string{
+		"-project", task.MadeProj,
+		"-target", target,
+		"-configuration", "Default",
 	}
+
+	if GPrefs.Threads != 0 {
+		args = append(args, "-jobs", fmt.Sprintf("%d", GPrefs.Threads))
+	}
+	if gOpts.Ios {
+		args = append(args, "-arch", "arm64", "-sdk", "iphoneos")
+	}
+	args = append(args, "build")
+
+	if len(gOpts.Verbose) > 0 {
+		fmt.Printf("xcodebuild %s\n", strings.Join(args, " "))
+	}
+	cmd = exec.Command("xcodebuild", args...)
 
 	var stdoutStderr []byte
 	stdoutStderr, err = cmd.CombinedOutput()
@@ -221,18 +180,6 @@ func workerStdout(messages <-chan string, wg *sync.WaitGroup) {
 	}
 }
 
-func isAloneProject(task *Task) bool {
-	if runtime.GOOS != "windows" {
-		return false
-	}
-	for _, p := range GPrefs.Projects {
-		if p.Alone && strings.Contains(task.Messages, p.Name) {
-			return true
-		}
-	}
-	return false
-}
-
 func isIgnoreProject(task *Task) bool {
 	for _, p := range GPrefs.Projects {
 		if p.Ignore && strings.Contains(task.Messages, p.Name) {
@@ -248,7 +195,6 @@ func run(job *Job, config string) (err error) {
 	var results = make(chan *Task, len(job.Tasks))
 	var cost int
 	var numRunning int
-	var isAloneLaunched bool
 	var wg sync.WaitGroup
 
 	log.Printf("._%s_.\n", config)
@@ -270,8 +216,7 @@ func run(job *Job, config string) (err error) {
 		for _, task := range job.Tasks {
 			if !task.Running && !task.IsCompleted() {
 				if !task.HasPendingDeps(job) {
-					if (!isAloneProject(task) && !isAloneLaunched) || numRunning == 0 {
-						isAloneLaunched = isAloneProject(task)
+					if numRunning == 0 {
 						task.Running = true
 						cost += task.Cost
 						numRunning++
@@ -289,7 +234,6 @@ func run(job *Job, config string) (err error) {
 			case task := <-results:
 				tasksCompleted++
 				numRunning--
-				isAloneLaunched = false
 				cost -= task.Cost
 				if err2 := task.Err; err2 != nil {
 					if err == nil && !gOpts.ContinueErr {
@@ -522,5 +466,4 @@ func main() {
 			}
 		}
 	}
-
 }

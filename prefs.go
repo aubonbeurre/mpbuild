@@ -24,7 +24,6 @@ type Prefs struct {
 // Project ...
 type Project struct {
 	Name   string `yaml:"name"`
-	Alone  bool   `yaml:"alone,omitempty"`
 	Ignore bool   `yaml:"ignore,omitempty"`
 }
 
@@ -43,13 +42,6 @@ func (d *Prefs) Load() {
 		GPrefs.Workers = 3
 		GPrefs.Threads = 10
 		GPrefs.Projects = []Project{
-			{Name: "HandlerProject", Alone: true},
-			{Name: "HandlerTimeline", Alone: true},
-			{Name: "HandlerGraphics", Alone: true},
-			{Name: "HandlerSourceMonitor", Alone: true},
-			{Name: "HandlerEffectControls", Alone: true},
-			{Name: "TeamProjectsLocalHub", Alone: true},
-			{Name: "TeamProjectsLocalLib", Alone: true},
 			{Name: "makeDVA", Ignore: true},
 		}
 		if data, err = yaml.Marshal(&GPrefs); err != nil {
