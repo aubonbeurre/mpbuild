@@ -3,3 +3,4 @@ prefs.yml
 gostats
 *.exe
 debug
+.vscode

@@ -21,6 +21,7 @@ var gOpts struct {
 	Verbose     []bool   `short:"v" long:"verbose" description:"Show verbose debug information"`
 	Config      []string `short:"c" long:"config" description:"Specify multiple Debug or Release (default both)"`
 	Log         string   `short:"l" long:"log" description:"Log file"`
+	RmLog       bool     `short:"L" long:"rmlog" description:"Truncate previous logfile (do not append)"`
 	Ios         bool     `short:"i" long:"ios" description:"ios build"`
 	Quiet       bool     `short:"q" long:"quiet" description:"Suppress most xcodebuild output"`
 	Start       string   `short:"s" long:"start" description:"Start at project <search>"`
@@ -255,7 +256,11 @@ func run(job *Job, config string) (err error) {
 var parser = flags.NewParser(&gOpts, flags.Default)
 
 func logSetupAndDestruct() func() {
-	logFile, err := os.OpenFile(gOpts.Log, os.O_CREATE|os.O_APPEND|os.O_RDWR, 0666)
+	perm := os.O_CREATE | os.O_APPEND | os.O_RDWR
+	if !gOpts.RmLog {
+		perm |= os.O_APPEND
+	}
+	logFile, err := os.OpenFile(gOpts.Log, perm, 0666)
 	if err != nil {
 		log.Panicln(err)
 	}
