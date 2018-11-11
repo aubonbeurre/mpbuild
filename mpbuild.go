@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -305,7 +306,7 @@ func main() {
 	}
 
 	if gOpts.Bazel {
-		runBazel(args[0])
+		//runBazel(args[0])
 		return
 	}
 
