@@ -218,12 +218,10 @@ func run(job *Job, config string) (err error) {
 		for _, task := range job.Tasks {
 			if !task.Running && !task.IsCompleted() {
 				if !task.HasPendingDeps(job) {
-					if numRunning == 0 {
-						task.Running = true
-						cost += task.Cost
-						numRunning++
-						tasks <- task
-					}
+					task.Running = true
+					cost += task.Cost
+					numRunning++
+					tasks <- task
 				} else {
 					//fmt.Printf("Skipping %s\n", task.Messages)
 				}
