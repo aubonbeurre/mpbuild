@@ -117,6 +117,8 @@ func logError(task *Task, msg string, err error) {
 func build(id int, task *Task, config string) (err error) {
 	var projname = strings.Split(filepath.Base(task.MadeProj), ".")[0]
 	log.Printf("mpbuild: START %s|%s (worker %d)\n", projname, config, id)
+	fmt.Printf("mpbuild: START %s|%s (worker %d)\n", projname, config, id)
+
 	task.Start = time.Now()
 	var cmd *exec.Cmd
 
@@ -243,9 +245,7 @@ func run(job *Job, config string) (err error) {
 				} else {
 					var Elapsed = time.Since(task.Start).Round(time.Duration(time.Second)).String()
 					log.Printf("mpbuild: ->Done %s|%s (%d/%d, cost:%d, time:%s)\n", task.Messages, config, tasksCompleted, len(job.Tasks), cost, Elapsed)
-					if gOpts.Quiet && len(gOpts.Log) > 0 {
-						fmt.Printf("mpbuild: ->Done %s|%s (%d/%d, cost:%d, time:%s)\n", task.Messages, config, tasksCompleted, len(job.Tasks), cost, Elapsed)
-					}
+					fmt.Printf("mpbuild: ->Done %s|%s (%d/%d, cost:%d, time:%s)\n", task.Messages, config, tasksCompleted, len(job.Tasks), cost, Elapsed)
 				}
 			case <-time.After(time.Second):
 				//fmt.Fprintf(os.Stderr, "Sleeping: %d\n", tasksCompleted)
